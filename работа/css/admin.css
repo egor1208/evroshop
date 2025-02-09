@@ -1,0 +1,136 @@
+<?php
+session_start();
+require_once 'config/database.php';
+
+// Получение категорий
+$categories = $pdo->query("SELECT * FROM categories")->fetchAll();
+
+// Фильтрация по категории
+$category_id = isset($_GET['category']) ? (int)$_GET['category'] : null;
+
+// Поиск
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+// Сортировка
+$sort = isset($_GET['sort']) ? $_GET['sort'] : 'name_asc';
+
+// Формирование SQL запроса
+$sql = "SELECT p.*, c.name as category_name 
+        FROM products p 
+        LEFT JOIN categories c ON p.category_id = c.id 
+        WHERE 1=1";
+
+$params = [];
+
+if ($category_id) {
+    $sql .= " AND p.category_id = ?";
+    $params[] = $category_id;
+}
+
+if ($search) {
+    $sql .= " AND (p.name LIKE ? OR p.description LIKE ?)";
+    $params[] = "%$search%";
+    $params[] = "%$search%";
+}
+
+// Добавление сортировки
+switch ($sort) {
+    case 'price_asc':
+        $sql .= " ORDER BY p.price ASC";
+        break;
+    case 'price_desc':
+        $sql .= " ORDER BY p.price DESC";
+        break;
+    case 'name_desc':
+        $sql .= " ORDER BY p.name DESC";
+        break;
+    default:
+        $sql .= " ORDER BY p.name ASC";
+}
+
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$products = $stmt->fetchAll();
+?>
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Каталог товаров</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/catalog.css">
+</head>
+<body>
+    <?php include 'includes/header.php'; ?>
+
+    <main>
+        <div class="catalog-container">
+            <aside class="filters">
+                <h2>Фильтры</h2>
+                
+                <form action="" method="GET" class="filter-form">
+                    <div class="form-group">
+                        <label for="search">Поиск</label>
+                        <input type="text" id="search" name="search" value="<?php echo htmlspecialchars($search); ?>">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="category">Категория</label>
+                        <select name="category" id="category">
+                            <option value="">Все категории</option>
+                            <?php foreach ($categories as $category): ?>
+                                <option value="<?php echo $category['id']; ?>" 
+                                    <?php echo $category_id == $category['id'] ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($category['name']); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sort">Сортировка</label>
+                        <select name="sort" id="sort">
+                            <option value="name_asc" <?php echo $sort === 'name_asc' ? 'selected' : ''; ?>>По названию (А-Я)</option>
+                            <option value="name_desc" <?php echo $sort === 'name_desc' ? 'selected' : ''; ?>>По названию (Я-А)</option>
+                            <option value="price_asc" <?php echo $sort === 'price_asc' ? 'selected' : ''; ?>>По цене (возрастание)</option>
+                            <option value="price_desc" <?php echo $sort === 'price_desc' ? 'selected' : ''; ?>>По цене (убывание)</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Применить</button>
+                </form>
+            </aside>
+
+            <div class="products-section">
+                <h1>Каталог товаров</h1>
+                
+                <?php if (empty($products)): ?>
+                    <p class="no-products">Товары не найдены</p>
+                <?php else: ?>
+                    <div class="products-grid">
+                        <?php foreach ($products as $product): ?>
+                            <div class="product-card">
+                                <img src="<?php echo htmlspecialchars($product['image_url']); ?>" 
+                                     alt="<?php echo htmlspecialchars($product['name']); ?>">
+                                <h3><?php echo htmlspecialchars($product['name']); ?></h3>
+                                <p class="category"><?php echo htmlspecialchars($product['category_name']); ?></p>
+                                <p class="price"><?php echo number_format($product['price'], 2); ?> ₽</p>
+                                <button class="btn add-to-cart" 
+                                        data-product-id="<?php echo $product['id']; ?>">
+                                    В корзину
+                                </button>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </main>
+
+    <?php include 'includes/footer.php'; ?>
+
+    <script src="assets/js/catalog.js"></script>
+</body>
+</html>
